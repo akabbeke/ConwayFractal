@@ -1,7 +1,6 @@
 
 import numpy as np
 import Image
-import threading
 import time
 
 def lifeStep(X):
@@ -31,31 +30,31 @@ def iterate(X,name,n):
 	# Iterates the field n times
 	for q in range(n):
 		start = time.time()
-		for h in range(2):
+		for h in range(1):
 			X=lifeStep(X)
 		X=tessellate(X,2)
 		
-		img = Image.new( 'RGB', X.shape, "white")
+		img = Image.new( 'RGB', X.shape, "black")
 		pixels = img.load()
 
 		for i in range(img.size[0]):
 			for j in range(img.size[1]):
 				if X[i,j] == 1:
-					pixels[i,j] = (int((i*255)/img.size[0]), int((j*255)/img.size[1]), 100) # set the colour accordingly
+					pixels[i,j] = (int((i*255)/img.size[0]), int((j*255)/img.size[1]), 255) # set the colour accordingly
 
 		img.save(name+str(q)+'.png')
 		print time.time()-start
 		print np.sum(X)
 
-X = np.array([[0,0,0,0],[0,1,1,0],[0,1,1,0],[0,0,0,0]])
+#X= np.array([[0,0,0,0],[0,1,1,0],[0,1,1,0],[0,0,0,0]])
 # a = np.random.random(())
 
 
 # b = np.zeros((a.shape[0]+2,a.shape[1]+2))
 
-#X = np.zeros((6, 9), dtype=bool)
-#r = np.random.random((4, 7))
-#X[1:5, 1:8] = (r > 0.75)
+X = np.zeros((6, 9), dtype=bool)
+r = np.random.random((4, 7))
+X[1:5, 1:8] = (r > 0.75)
 #a[2:5,4] = np.array([[1,1,1]])
 iterate(X,'Renders/beacon',10)
 
