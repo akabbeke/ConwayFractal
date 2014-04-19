@@ -2,6 +2,44 @@
 import numpy
 import Image
 import pp
+import math
+from scipy import signal
+
+def addToColorMap(loc,sub,cMap,val):
+	cMap[loc[0]:loc[0]+sub.shape[0], loc[1]:loc[1]+sub.shape[1]] = sub*val
+	return cMap
+
+def findSubMarix(X,sub):
+
+	a = numpy.copy(X)
+	b = numpy.copy(sub)
+
+	a[a==0] = -1
+	b[b==0] = -1
+
+	max_peak = numpy.prod(b.shape)
+
+	c = signal.correlate(a,b, 'valid')
+
+	return numpy.where(c == max_peak)
+
+def colorMap(X,sub,val,cMap):
+
+	cMap = colorMap2(X,sub,val,cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,1),val,cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,2),val,cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,3),val,cMap)
+	return cMap
+
+def colorMap2(X,sub,val,cMap):
+
+	locs = findSubMarix(X,sub)
+
+	for i in range(len(locs[0])):
+		addToColorMap([locs[0][i],locs[1][i]],sub,cMap,val)
+
+	return cMap
+
 
 def lifeStep(X,m):
 
@@ -38,6 +76,17 @@ def sliceX(X,m):
 			numpy.delete(numpy.delete(X,range(X.shape[1]/2+1,X.shape[1]-1),axis=1),range(1,X.shape[0]/2-1),axis=0),
 			numpy.delete(numpy.delete(X,range(1,X.shape[1]/2-1),axis=1),range(1,X.shape[0]/2-1),axis=0))
 
+def renderIm(Xi,q):
+	img = Image.new( 'RGB', Xi.shape, "white")
+	pixels = img.load()
+
+	for i in range(img.size[1]):
+		for j in range(img.size[0]):
+			if Xi[i,j] == 1:
+				pixels[j,i] = (0,0,0) # set the colour
+	print X.sum()
+	img.save(name+str(q)+'.gif')
+
 def iterate(X,name,n,m):
 
 	# Iterates the field n times
@@ -62,27 +111,61 @@ def iterate(X,name,n,m):
 		 								jobs[1][:jobs[1].shape[0]-(2*m),(2*m):]]),
 		 				  numpy.hstack([jobs[2][(2*m):,:jobs[3].shape[1]-(2*m)],
 		 								jobs[3][(2*m):,(2*m):]])])
-	if n-(q+1) == 0: 
-		Xi = X
-	else:
-		Xi = tessellate(X,m**(n-(q+1)))
+		cMap = numpy.zeros(X.shape)
+		cMap2 = numpy.zeros(X.shape)
+		sub = numpy.array([[0,0,0,0],
+						   [0,1,1,0],
+						   [1,0,0,1],
+						   [0,0,0,0]])
 
-	jobServer.print_stats()
-	
-	img = Image.new( 'RGB', Xi.shape, "black")
-	pixels = img.load()
+		sub2= numpy.array([[0,0,0,0,0,0],
+						   [0,0,1,1,0,0],
+						   [0,1,0,0,1,0],
+						   [0,1,0,0,1,0],
+						   [0,0,1,1,0,0],
+						   [0,0,0,0,0,0]])
 
-	for i in range(img.size[0]):
-		for j in range(img.size[1]):
-			if Xi[i,j] == 1:
-				pixels[i,j] = ((i*255)/img.size[0],(j*255)/img.size[1],100) # set the colour
+		sub = tessellate(sub,2)
 
-	img.save(name+str(q)+'.png')
+		sub2 = tessellate(sub2,2)
+		
+		cMap = colorMap(X,sub,1,numpy.copy(cMap))
+		cMap2 = colorMap2(X,sub2,1,numpy.copy(cMap2))
+		if n-(q+1) == 0: 
+			Xi = X
+		else:
+			Xi = tessellate(X,m**(n-(q+1)))
+			cMap2 = tessellate(cMap2,m**(n-(q+1)))
+			cMap = tessellate(cMap,m**(n-(q+1)))
+
+		#jobServer.print_stats()
+		
+		img = Image.new( 'RGB', Xi.shape, "white")
+		pixels = img.load()
+
+		for i in range(img.size[1]):
+			for j in range(img.size[0]):
+				if Xi[i,j] == 1:
+					pixels[j,i] = (0,0,0) # set the colour
+				if cMap[i,j]!= 0:
+					pixels[j,i] = (255,0,0)
+				if cMap2[i,j]!= 0:
+					pixels[j,i] = (0,255,0)
+
+		print math.log(X.sum())/math.log(X.shape[0])
+		img.save(name+str(q)+'.gif')
 
 def main():
 
-	X = numpy.array([[1,0,0,0,0,1],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[1,0,0,0,0,1]])
-	iterate(X,'Renders/Ctest2',10,2)
+	X = numpy.array([
+					[0,0,0,0,0,0],
+					[0,0,1,1,0,0],
+					[0,1,0,0,1,0],
+					[0,1,0,0,1,0],
+					[0,0,1,1,0,0],
+					[0,0,0,0,0,0]])
+
+	iterate(X,'Renders/testicals',9,2)
 
 if __name__ == "__main__":
     main()
