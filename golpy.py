@@ -1,12 +1,12 @@
 
 import numpy
 import Image
-import pp
 import math
 from scipy import signal
+import matplotlib.pyplot as plt
 
-def addToColorMap(loc,sub,cMap,val):
-	cMap[loc[0]:loc[0]+sub.shape[0], loc[1]:loc[1]+sub.shape[1]] = sub*val
+def addToColorMap(loc,sub,cMap):
+	cMap[loc[0]:loc[0]+sub.shape[0], loc[1]:loc[1]+sub.shape[1]] = sub
 	return cMap
 
 def findSubMarix(X,sub):
@@ -18,30 +18,28 @@ def findSubMarix(X,sub):
 	b[b==0] = -1
 
 	max_peak = numpy.prod(b.shape)
-
 	c = signal.correlate(a,b, 'valid')
-
 	return numpy.where(c == max_peak)
 
-def colorMap(X,sub,val,cMap):
+def colorMap(X,sub,cMap):
 
-	cMap = colorMap2(X,sub,val,cMap)
-	cMap = colorMap2(X,numpy.rot90(sub,1),val,cMap)
-	cMap = colorMap2(X,numpy.rot90(sub,2),val,cMap)
-	cMap = colorMap2(X,numpy.rot90(sub,3),val,cMap)
+	cMap = colorMap2(X,sub,cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,1),cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,2),cMap)
+	cMap = colorMap2(X,numpy.rot90(sub,3),cMap)
 	return cMap
 
-def colorMap2(X,sub,val,cMap):
+def colorMap2(X,sub,cMap):
 
 	locs = findSubMarix(X,sub)
 
 	for i in range(len(locs[0])):
-		addToColorMap([locs[0][i],locs[1][i]],sub,cMap,val)
+		addToColorMap([locs[0][i],locs[1][i]],sub,cMap)
 
 	return cMap
 
 
-def lifeStep(X,m):
+def lifeStep(X):
 
     # Game of life step using generator expressions
 
@@ -52,29 +50,58 @@ def lifeStep(X,m):
     nbrs_count = sum(numpy.roll(numpy.roll(X, i, 0), j, 1)
                      for i in (-1, 0, 1) for j in (-1, 0, 1)
                      if (i != 0 or j != 0))
-    X = (nbrs_count == 3) | (X & (nbrs_count == 2))
+    X = ((nbrs_count == 3) | (X == 1))&(nbrs_count != 8)
 
-    return tessellate(X,m)
+    return X
 
-def tessellate(X,n):
+def tessellate(X,m,n):
 
 	# Tesselates the field X into n*n subdevisions
 
-	Xn = numpy.zeros(numpy.array(X.shape)*n)
+	Xn = numpy.zeros([numpy.array(X.shape)[0]*m,numpy.array(X.shape)[1]*n])
 
 	for i in range(X.shape[0]):
 		for j in range(X.shape[1]):
-			Xn[i*n:(i+1)*n,j*n:(j+1)*n] = X[i,j]*numpy.ones((n,n))
+			Xn[i*m:(i+1)*m,j*n:(j+1)*n] = X[i,j]*numpy.ones((m,n))
 	return Xn
 
-def sliceX(X,m):
+def tessellate2(X,m,n):
 
-	# Slices the X into smaller chunks to be worked on by each core
+	Xn = numpy.zeros(numpy.array(X.shape)*3)
 
-	return(numpy.delete(numpy.delete(X,range(X.shape[1]/2+1,X.shape[1]-1),axis=1),range(X.shape[0]/2+1,X.shape[0]-1),axis=0),
-			numpy.delete(numpy.delete(X,range(1,X.shape[1]/2-1),axis=1),range(X.shape[0]/2+1,X.shape[0]-1),axis=0),
-			numpy.delete(numpy.delete(X,range(X.shape[1]/2+1,X.shape[1]-1),axis=1),range(1,X.shape[0]/2-1),axis=0),
-			numpy.delete(numpy.delete(X,range(1,X.shape[1]/2-1),axis=1),range(1,X.shape[0]/2-1),axis=0))
+	inner = numpy.ones((m,n))
+	inner[1,1] = 0
+
+	for i in range(X.shape[0]):
+		for j in range(X.shape[1]):
+			Xn[i*3:(i+1)*3,j*3:(j+1)*3] = X[i,j]*inner
+	return Xn
+
+def tessellate3(X,m,n):
+
+	# Tesselates the field X into n*n subdevisions
+
+	Xn = numpy.zeros([numpy.array(X.shape)[0]*(m+1),numpy.array(X.shape)[1]*(n+1)])
+
+	for i in range(X.shape[0]):
+		for j in range(X.shape[1]):
+			outer = numpy.ones(((m+1),(n+1)))
+			outer[0:m,0:n] = X[i,j]*numpy.ones((m,n))
+			Xn[i*(m+1):(i+1)*(m+1),j*(n+1):(j+1)*(n+1)] = outer
+	return Xn
+
+def tessellate4(X,m,n):
+
+	# Tesselates the field X into n*n subdevisions
+
+	Xn = numpy.zeros([numpy.array(X.shape)[0]*(m+1),numpy.array(X.shape)[1]*(n+1)])
+
+	for i in range(X.shape[0]):
+		for j in range(X.shape[1]):
+			outer = numpy.zeros(((m+1),(n+1)))
+			outer[0:m,0:n] = X[i,j]*numpy.ones((m,n))
+			Xn[i*(m+1):(i+1)*(m+1),j*(n+1):(j+1)*(n+1)] = outer
+	return Xn
 
 def renderIm(Xi,q):
 	img = Image.new( 'RGB', Xi.shape, "white")
@@ -84,88 +111,52 @@ def renderIm(Xi,q):
 		for j in range(img.size[0]):
 			if Xi[i,j] == 1:
 				pixels[j,i] = (0,0,0) # set the colour
-	print X.sum()
 	img.save(name+str(q)+'.gif')
 
-def iterate(X,name,n,m):
+def iterate(X,name,l,m,n):
 
-	# Iterates the field n times
+	# Iterates the field l times
 	# X = field
-	# name = file name Prefix
-	# n = number of life cycles
-	# m = tessellation factor
+	# name = file name prefix
+	# l = number of life cycles
+	# m,n = x & y tessellation factors
 
-	ppservers = ()
-
-	# Creates jobserver with automatically detected number of workers
-
-	jobServer = pp.Server(ppservers=ppservers)
+	for q in range(l):
 
 
-	for q in range(n):
+		for r in range(2):
+			X = lifeStep(X)
 
-		arrayList = sliceX(X,m)
-		jobs = [jobServer.submit(lifeStep, (part,m), (tessellate,), ("numpy",))() for part in arrayList]
+		X = tessellate(X,m,n)
 
-		X = numpy.vstack([numpy.hstack([jobs[0][:jobs[0].shape[0]-(2*m),:jobs[0].shape[1]-(2*m)],
-		 								jobs[1][:jobs[1].shape[0]-(2*m),(2*m):]]),
-		 				  numpy.hstack([jobs[2][(2*m):,:jobs[3].shape[1]-(2*m)],
-		 								jobs[3][(2*m):,(2*m):]])])
-		cMap = numpy.zeros(X.shape)
-		cMap2 = numpy.zeros(X.shape)
-		sub = numpy.array([[0,0,0,0],
-						   [0,1,1,0],
-						   [1,0,0,1],
-						   [0,0,0,0]])
+		print math.log(numpy.sum(X))/math.log(numpy.sum(n**(q+1)))
 
-		sub2= numpy.array([[0,0,0,0,0,0],
-						   [0,0,1,1,0,0],
-						   [0,1,0,0,1,0],
-						   [0,1,0,0,1,0],
-						   [0,0,1,1,0,0],
-						   [0,0,0,0,0,0]])
+		Xi = tessellate(X,m**(l-1-q),n**(l-1-q))
 
-		sub = tessellate(sub,2)
-
-		sub2 = tessellate(sub2,2)
-		
-		cMap = colorMap(X,sub,1,numpy.copy(cMap))
-		cMap2 = colorMap2(X,sub2,1,numpy.copy(cMap2))
-		if n-(q+1) == 0: 
-			Xi = X
-		else:
-			Xi = tessellate(X,m**(n-(q+1)))
-			cMap2 = tessellate(cMap2,m**(n-(q+1)))
-			cMap = tessellate(cMap,m**(n-(q+1)))
-
-		#jobServer.print_stats()
-		
-		img = Image.new( 'RGB', Xi.shape, "white")
+		img = Image.new( 'RGBA', Xi.shape)
 		pixels = img.load()
 
-		for i in range(img.size[1]):
-			for j in range(img.size[0]):
+		for i in range(img.size[0]):
+			for j in range(img.size[1]):
 				if Xi[i,j] == 1:
-					pixels[j,i] = (0,0,0) # set the colour
-				if cMap[i,j]!= 0:
-					pixels[j,i] = (255,0,0)
-				if cMap2[i,j]!= 0:
-					pixels[j,i] = (0,255,0)
+					pixels[i,j] = (0,0,0) # set the colo
 
-		print math.log(X.sum())/math.log(X.shape[0])
-		img.save(name+str(q)+'.gif')
+		img.save(name+str(q+1)+'.png')
+
 
 def main():
+	X = numpy.zeros((5,5))
+	X[2,2] = 1
+	# X = numpy.array([
+	# 				[0,0,0,0,0,0,0],
+	# 				[0,0,0,0,0,0,0],
+	# 				[0,0,1,1,1,0,0],
+	# 				[0,0,1,0,1,0,0],
+	# 				[0,0,1,1,1,0,0],
+	# 				[0,0,0,0,0,0,0],
+	# 				[0,0,0,0,0,0,0]])
 
-	X = numpy.array([
-					[0,0,0,0,0,0],
-					[0,0,1,1,0,0],
-					[0,1,0,0,1,0],
-					[0,1,0,0,1,0],
-					[0,0,1,1,0,0],
-					[0,0,0,0,0,0]])
-
-	iterate(X,'Renders/testicals',9,2)
+	iterate(X,'Renders/lobes',9,2,2)
 
 if __name__ == "__main__":
     main()
